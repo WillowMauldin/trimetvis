@@ -1,0 +1,10 @@
+[Unit]
+Description=TriMet collection service
+After=multi-user.target
+
+[Service]
+Type=oneshot
+User=willow
+Environment=TRIMET_APP_ID=1234
+ExecStart=/bin/bash /home/willow/projects/trimetvis/collect.sh
+WorkingDirectory=/home/willow/projects/trimetvis

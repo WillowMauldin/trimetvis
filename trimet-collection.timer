@@ -1,0 +1,10 @@
+[Unit]
+Description=collect trimet data every minute
+Requires=trimet-collection.service
+
+[Timer]
+OnCalendar=*:*:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
