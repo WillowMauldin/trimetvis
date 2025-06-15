@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use image::{GrayImage, ImageBuffer};
+use image::{RgbImage, ImageBuffer, Rgb};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::env;
@@ -43,16 +43,19 @@ fn bucket_vehicles(vehicles: &[VehiclePosition], min_lat: f64, max_lat: f64, min
 }
 
 fn export_matrix_as_image(matrix: &[[u32; 256]; 256], max_count: u32, output_path: &str) -> Result<()> {
-    let mut img: GrayImage = ImageBuffer::new(256, 256);
+    let mut img: RgbImage = ImageBuffer::new(256, 256);
     
     for (y, row) in matrix.iter().enumerate() {
         for (x, &count) in row.iter().enumerate() {
-            let intensity = if max_count > 0 {
-                ((count as f64 / max_count as f64) * 255.0) as u8
+            let normalized_value = if max_count > 0 {
+                count as f64 / max_count as f64
             } else {
-                0
+                0.0
             };
-            img.put_pixel(x as u32, y as u32, image::Luma([intensity]));
+            
+            let color = colorous::INFERNO.eval_continuous(normalized_value);
+            
+            img.put_pixel(x as u32, y as u32, Rgb([color.r, color.g, color.b]));
         }
     }
     
