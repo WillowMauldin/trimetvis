@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Result};
 use image::{GrayImage, ImageBuffer};
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
+use std::path::Path;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,7 +12,7 @@ struct PositionsFile {
     result_set: ResultSet,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct VehiclePosition {
     latitude: f64,
     longitude: f64,
@@ -58,62 +60,136 @@ fn export_matrix_as_image(matrix: &[[u32; 256]; 256], max_count: u32, output_pat
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
+fn load_vehicles_by_minute_from_directory(dir_path: &str) -> Result<BTreeMap<u32, Vec<VehiclePosition>>> {
+    let mut vehicles_by_minute = BTreeMap::new();
     
-    if args.len() != 2 {
-        return Err(anyhow!("Usage: {} <json_file_path>", args[0]));
+    fn visit_dir(dir: &Path, vehicles_map: &mut BTreeMap<u32, Vec<VehiclePosition>>) -> Result<()> {
+        let entries = fs::read_dir(dir)
+            .map_err(|err| anyhow!("Error reading directory '{}': {}", dir.display(), err))?;
+        
+        for entry in entries {
+            let entry = entry.map_err(|err| anyhow!("Error reading directory entry: {}", err))?;
+            let path = entry.path();
+            
+            if path.is_dir() {
+                visit_dir(&path, vehicles_map)?;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                let file_stem = path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .ok_or_else(|| anyhow!("Invalid filename: {}", path.display()))?;
+                
+                let minute = file_stem.parse::<u32>()
+                    .map_err(|_| anyhow!("Filename is not a valid minute: {}", file_stem))?;
+                
+                println!("Processing file: {} (minute {})", path.display(), minute);
+                
+                let contents = fs::read_to_string(&path)
+                    .map_err(|err| anyhow!("Error reading file '{}': {}", path.display(), err))?;
+                
+                let positions_file: PositionsFile = serde_json::from_str(&contents)
+                    .map_err(|err| anyhow!("Error parsing JSON in '{}': {}", path.display(), err))?;
+                
+                vehicles_map.insert(minute, positions_file.result_set.vehicle);
+            }
+        }
+        
+        Ok(())
     }
     
-    let file_path = &args[1];
+    let dir_path = Path::new(dir_path);
+    visit_dir(dir_path, &mut vehicles_by_minute)?;
     
-    let contents = fs::read_to_string(file_path)
-        .map_err(|err| anyhow!("Error reading file '{}': {}", file_path, err))?;
+    Ok(vehicles_by_minute)
+}
+
+fn get_global_bounds(vehicles_by_minute: &BTreeMap<u32, Vec<VehiclePosition>>) -> Result<(f64, f64, f64, f64)> {
+    let mut min_lat = f64::INFINITY;
+    let mut max_lat = f64::NEG_INFINITY;
+    let mut min_lon = f64::INFINITY;
+    let mut max_lon = f64::NEG_INFINITY;
     
-    let positions_file: PositionsFile = serde_json::from_str(&contents)
-        .map_err(|err| anyhow!("Error parsing JSON: {}", err))?;
-    
-    let vehicles = &positions_file.result_set.vehicle;
-    println!("Successfully loaded {} vehicle positions", vehicles.len());
-    
-    if !vehicles.is_empty() {
-        let mut min_lat = vehicles[0].latitude;
-        let mut max_lat = vehicles[0].latitude;
-        let mut min_lon = vehicles[0].longitude;
-        let mut max_lon = vehicles[0].longitude;
-        
+    for vehicles in vehicles_by_minute.values() {
         for vehicle in vehicles {
             min_lat = min_lat.min(vehicle.latitude);
             max_lat = max_lat.max(vehicle.latitude);
             min_lon = min_lon.min(vehicle.longitude);
             max_lon = max_lon.max(vehicle.longitude);
         }
+    }
+    
+    if min_lat == f64::INFINITY {
+        return Err(anyhow!("No vehicle data found"));
+    }
+    
+    Ok((min_lat, max_lat, min_lon, max_lon))
+}
+
+fn main() -> Result<()> {
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() != 2 {
+        return Err(anyhow!("Usage: {} <n_minutes>", args[0]));
+    }
+    
+    let n_minutes = args[1].parse::<u32>()
+        .map_err(|_| anyhow!("n_minutes must be a positive integer"))?;
+    
+    let data_dir = "data";
+    
+    if !Path::new(data_dir).exists() {
+        return Err(anyhow!("Data directory '{}' does not exist", data_dir));
+    }
+    
+    let vehicles_by_minute = load_vehicles_by_minute_from_directory(data_dir)?;
+    
+    if vehicles_by_minute.is_empty() {
+        return Err(anyhow!("No vehicle data found in the data directory"));
+    }
+    
+    println!("Loaded data for {} minutes", vehicles_by_minute.len());
+    
+    let (min_lat, max_lat, min_lon, max_lon) = get_global_bounds(&vehicles_by_minute)?;
+    println!("Global bounds - Latitude: {:.6} to {:.6}, Longitude: {:.6} to {:.6}", 
+             min_lat, max_lat, min_lon, max_lon);
+    
+    fs::create_dir_all("heatmaps")?;
+    
+    let minutes: Vec<u32> = vehicles_by_minute.keys().cloned().collect();
+    
+    for &current_minute in &minutes {
+        let start_minute = if current_minute >= n_minutes { 
+            current_minute - n_minutes + 1 
+        } else { 
+            minutes[0] 
+        };
         
-        println!("Latitude range: {:.6} to {:.6}", min_lat, max_lat);
-        println!("Longitude range: {:.6} to {:.6}", min_lon, max_lon);
+        let mut combined_vehicles = Vec::new();
         
-        let matrix = bucket_vehicles(vehicles, min_lat, max_lat, min_lon, max_lon);
-        
-        let mut total_buckets_used = 0;
-        let mut max_vehicles_in_bucket = 0;
-        
-        for row in &matrix {
-            for &count in row {
-                if count > 0 {
-                    total_buckets_used += 1;
-                    max_vehicles_in_bucket = max_vehicles_in_bucket.max(count);
-                }
+        for &minute in &minutes {
+            if minute >= start_minute && minute <= current_minute {
+                combined_vehicles.extend(vehicles_by_minute[&minute].iter().cloned());
             }
         }
         
-        println!("Bucketed into 256x256 matrix:");
-        println!("  Buckets with vehicles: {}/65536", total_buckets_used);
-        println!("  Max vehicles in single bucket: {}", max_vehicles_in_bucket);
-        
-        let output_path = "vehicle_heatmap.png";
-        export_matrix_as_image(&matrix, max_vehicles_in_bucket, output_path)?;
-        println!("Exported heatmap to: {}", output_path);
+        if !combined_vehicles.is_empty() {
+            let matrix = bucket_vehicles(&combined_vehicles, min_lat, max_lat, min_lon, max_lon);
+            
+            let mut max_vehicles_in_bucket = 0;
+            for row in &matrix {
+                for &count in row {
+                    max_vehicles_in_bucket = max_vehicles_in_bucket.max(count);
+                }
+            }
+            
+            let output_path = format!("heatmaps/heatmap_{:04}.png", current_minute);
+            export_matrix_as_image(&matrix, max_vehicles_in_bucket, &output_path)?;
+            
+            println!("Minute {}: {} vehicles (from minutes {}-{}) -> {}", 
+                     current_minute, combined_vehicles.len(), start_minute, current_minute, output_path);
+        }
     }
+    
+    println!("Generated {} heatmaps in the 'heatmaps' directory", minutes.len());
     
     Ok(())
 }
