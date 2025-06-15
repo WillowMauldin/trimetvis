@@ -30,6 +30,8 @@ echo "Framerate: $FRAMERATE fps"
 # -pattern_type glob: use glob pattern for input
 # -i: input pattern
 # -c:v libx264: use H.264 codec
+# -preset slow: better compression efficiency
+# -crf 18: high quality (0-51 scale, lower = better)
 # -pix_fmt yuv420p: pixel format for compatibility
 # -r: output framerate
 ffmpeg -y \
@@ -37,6 +39,8 @@ ffmpeg -y \
     -pattern_type glob \
     -i "$HEATMAPS_DIR/heatmap_*.png" \
     -c:v libx264 \
+    -preset slow \
+    -crf 18 \
     -pix_fmt yuv420p \
     -r "$FRAMERATE" \
     "$OUTPUT_FILE"
