@@ -7,7 +7,7 @@ set -e
 
 HEATMAPS_DIR="heatmaps"
 OUTPUT_FILE="${1:-heatmap_video.mp4}"
-FRAMERATE="${2:-2}"
+FRAMERATE="${2:-30}"
 
 if [ ! -d "$HEATMAPS_DIR" ]; then
     echo "Error: $HEATMAPS_DIR directory not found"
