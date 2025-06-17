@@ -58,15 +58,14 @@ fn bucket_vehicles(
     matrix
 }
 
-fn export_matrix_as_image(matrix: &Box<[[u32; 1024]; 1024]>, output_path: &str) -> Result<()> {
-    const MAX_COUNT: u32 = 10;
+fn export_matrix_as_image(matrix: &Box<[[u32; 1024]; 1024]>, output_path: &str, max_count: u32) -> Result<()> {
 
     let mut img: RgbImage = ImageBuffer::new(1024, 1024);
 
     for (y, row) in matrix.iter().enumerate() {
         for (x, &count) in row.iter().enumerate() {
-            let normalized_value = if MAX_COUNT > 0 {
-                count as f64 / MAX_COUNT as f64
+            let normalized_value = if max_count > 0 {
+                count as f64 / max_count as f64
             } else {
                 0.0
             };
@@ -156,13 +155,17 @@ fn get_global_bounds(
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 2 {
-        return Err(anyhow!("Usage: {} <n_minutes>", args[0]));
+    if args.len() != 3 {
+        return Err(anyhow!("Usage: {} <n_minutes> <max_bucket_constant>", args[0]));
     }
 
     let n_minutes = args[1]
         .parse::<u32>()
         .map_err(|_| anyhow!("n_minutes must be a positive integer"))?;
+
+    let max_bucket_constant = args[2]
+        .parse::<u32>()
+        .map_err(|_| anyhow!("max_bucket_constant must be a positive integer"))?;
 
     let data_dir = "data";
 
@@ -206,7 +209,7 @@ fn main() -> Result<()> {
             let matrix = bucket_vehicles(&combined_vehicles, min_lat, max_lat, min_lon, max_lon);
 
             let output_path = format!("heatmaps/heatmap_{:04}.png", current_minute);
-            export_matrix_as_image(&matrix, &output_path)?;
+            export_matrix_as_image(&matrix, &output_path, max_bucket_constant)?;
 
             let included_minutes: Vec<u32> = minutes
                 .iter()
