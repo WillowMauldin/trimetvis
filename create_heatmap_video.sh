@@ -6,7 +6,7 @@
 set -e
 
 HEATMAPS_DIR="heatmaps"
-OUTPUT_FILE="${1:-heatmap_video.mp4}"
+OUTPUT_FILE="${1:-heatmap_video.mkv}"
 FRAMERATE="${2:-30}"
 
 if [ ! -d "$HEATMAPS_DIR" ]; then
@@ -24,14 +24,14 @@ echo "Found $PNG_COUNT heatmap images"
 echo "Creating video: $OUTPUT_FILE"
 echo "Framerate: $FRAMERATE fps"
 
-# Use ffmpeg to create video from PNG sequence
+# Use ffmpeg to create lossless video from PNG sequence
 # -y: overwrite output file if it exists
 # -framerate: input framerate
 # -pattern_type glob: use glob pattern for input
 # -i: input pattern
 # -c:v libx264: use H.264 codec
-# -preset slow: better compression efficiency
-# -crf 18: high quality (0-51 scale, lower = better)
+# -preset ultrafast: fastest encoding
+# -crf 0: lossless encoding
 # -pix_fmt yuv420p: pixel format for compatibility
 # -r: output framerate
 ffmpeg -y \
@@ -39,9 +39,7 @@ ffmpeg -y \
     -pattern_type glob \
     -i "$HEATMAPS_DIR/heatmap_*.png" \
     -c:v libx264 \
-    -preset slow \
-    -crf 18 \
-    -pix_fmt yuv420p \
+    -qp 0 \
     -r "$FRAMERATE" \
     "$OUTPUT_FILE"
 

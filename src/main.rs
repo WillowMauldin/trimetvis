@@ -29,8 +29,8 @@ fn bucket_vehicles(
     max_lat: f64,
     min_lon: f64,
     max_lon: f64,
-) -> Box<[[u32; 512]; 512]> {
-    let mut matrix = Box::new([[0u32; 512]; 512]);
+) -> Box<[[u32; 1024]; 1024]> {
+    let mut matrix = Box::new([[0u32; 1024]; 1024]);
 
     let lat_range = max_lat - min_lat;
     let lon_range = max_lon - min_lon;
@@ -39,19 +39,29 @@ fn bucket_vehicles(
         let lat_normalized = (vehicle.latitude - min_lat) / lat_range;
         let lon_normalized = (vehicle.longitude - min_lon) / lon_range;
 
-        let row = ((lat_normalized * 511.0) as usize).min(511);
-        let col = ((lon_normalized * 511.0) as usize).min(511);
+        let row = ((lat_normalized * 1023.0) as usize).min(1023);
+        let col = ((lon_normalized * 1023.0) as usize).min(1023);
 
-        matrix[row][col] += 1;
+        matrix[(row + 1).min(1023).max(0)][(col + 1).min(1023).max(0)] += 1;
+        matrix[(row + 1).min(1023).max(0)][(col).min(1023).max(0)] += 1;
+        matrix[(row + 1).min(1023).max(0)][(col - 1).min(1023).max(0)] += 1;
+
+        matrix[(row).min(1023).max(0)][(col + 1).min(1023).max(0)] += 1;
+        matrix[(row).min(1023).max(0)][(col).min(1023).max(0)] += 1;
+        matrix[(row).min(1023).max(0)][(col - 1).min(1023).max(0)] += 1;
+
+        matrix[(row - 1).min(1023).max(0)][(col + 1).min(1023).max(0)] += 1;
+        matrix[(row - 1).min(1023).max(0)][(col).min(1023).max(0)] += 1;
+        matrix[(row - 1).min(1023).max(0)][(col - 1).min(1023).max(0)] += 1;
     }
 
     matrix
 }
 
-fn export_matrix_as_image(matrix: &Box<[[u32; 512]; 512]>, output_path: &str) -> Result<()> {
-    const MAX_COUNT: u32 = 5;
+fn export_matrix_as_image(matrix: &Box<[[u32; 1024]; 1024]>, output_path: &str) -> Result<()> {
+    const MAX_COUNT: u32 = 10;
 
-    let mut img: RgbImage = ImageBuffer::new(512, 512);
+    let mut img: RgbImage = ImageBuffer::new(1024, 1024);
 
     for (y, row) in matrix.iter().enumerate() {
         for (x, &count) in row.iter().enumerate() {
