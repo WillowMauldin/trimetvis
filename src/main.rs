@@ -56,17 +56,17 @@ fn bucket_vehicles(
         let row = ((lat_normalized * 1023.0) as usize).min(1023);
         let col = ((lon_normalized * 1023.0) as usize).min(1023);
 
-        matrix[(row + 1).min(1023).max(0)][(col + 1).min(1023).max(0)] += 1;
-        matrix[(row + 1).min(1023).max(0)][(col).min(1023).max(0)] += 1;
-        matrix[(row + 1).min(1023).max(0)][(col - 1).min(1023).max(0)] += 1;
+        matrix[(row + 1).min(1023)][(col + 1).min(1023)] += 1;
+        matrix[(row + 1).min(1023)][col] += 1;
+        matrix[(row + 1).min(1023)][col.saturating_sub(1)] += 1;
 
-        matrix[(row).min(1023).max(0)][(col + 1).min(1023).max(0)] += 1;
-        matrix[(row).min(1023).max(0)][(col).min(1023).max(0)] += 1;
-        matrix[(row).min(1023).max(0)][(col - 1).min(1023).max(0)] += 1;
+        matrix[row][(col + 1).min(1023)] += 1;
+        matrix[row][col] += 1;
+        matrix[row][col.saturating_sub(1)] += 1;
 
-        matrix[(row - 1).min(1023).max(0)][(col + 1).min(1023).max(0)] += 1;
-        matrix[(row - 1).min(1023).max(0)][(col).min(1023).max(0)] += 1;
-        matrix[(row - 1).min(1023).max(0)][(col - 1).min(1023).max(0)] += 1;
+        matrix[row.saturating_sub(1)][(col + 1).min(1023)] += 1;
+        matrix[row.saturating_sub(1)][col] += 1;
+        matrix[row.saturating_sub(1)][col.saturating_sub(1)] += 1;
     }
 
     matrix
