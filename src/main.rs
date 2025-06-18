@@ -1,10 +1,24 @@
 use anyhow::{Result, anyhow};
+use clap::Parser;
 use image::{ImageBuffer, Rgb, RgbImage};
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::env;
 use std::fs;
 use std::path::Path;
+
+#[derive(Parser)]
+#[command(name = "trimetvis")]
+#[command(about = "Generate transit heatmaps from vehicle position data")]
+struct Args {
+    #[arg(short = 'n', long = "minutes", default_value = "5")]
+    n_minutes: u32,
+
+    #[arg(short = 'm', long = "max-bucket", default_value = "10")]
+    max_bucket_constant: u32,
+
+    #[arg(short = 'd', long = "data-dir", default_value = "data")]
+    data_dir: String,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -153,21 +167,11 @@ fn get_global_bounds(
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
+    let args = Args::parse();
 
-    if args.len() != 3 {
-        return Err(anyhow!("Usage: {} <n_minutes> <max_bucket_constant>", args[0]));
-    }
-
-    let n_minutes = args[1]
-        .parse::<u32>()
-        .map_err(|_| anyhow!("n_minutes must be a positive integer"))?;
-
-    let max_bucket_constant = args[2]
-        .parse::<u32>()
-        .map_err(|_| anyhow!("max_bucket_constant must be a positive integer"))?;
-
-    let data_dir = "data";
+    let n_minutes = args.n_minutes;
+    let max_bucket_constant = args.max_bucket_constant;
+    let data_dir = &args.data_dir;
 
     if !Path::new(data_dir).exists() {
         return Err(anyhow!("Data directory '{}' does not exist", data_dir));
