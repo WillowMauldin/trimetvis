@@ -18,6 +18,12 @@ struct Args {
 
     #[arg(short = 'd', long = "data-dir", default_value = "data")]
     data_dir: String,
+
+    #[arg(long = "expand-start", help = "Minute at which window starts expanding (disabled if not set)")]
+    expand_start_minute: Option<u32>,
+
+    #[arg(long = "expand-max", default_value = "60", help = "Maximum window size after expansion")]
+    expand_max_size: u32,
 }
 
 #[derive(Deserialize)]
@@ -166,6 +172,22 @@ fn get_global_bounds(
     Ok((min_lat, max_lat, min_lon, max_lon))
 }
 
+fn calculate_window_size(
+    current_minute: u32,
+    base_minutes: u32,
+    expand_start_minute: Option<u32>,
+    expand_max_size: u32,
+) -> u32 {
+    match expand_start_minute {
+        Some(start_minute) if current_minute >= start_minute => {
+            let minutes_since_expansion = current_minute - start_minute;
+            let expanded_size = base_minutes + minutes_since_expansion;
+            expanded_size.min(expand_max_size)
+        }
+        _ => base_minutes,
+    }
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -196,6 +218,13 @@ fn main() -> Result<()> {
     let minutes: Vec<u32> = vehicles_by_minute.keys().cloned().collect();
 
     for &current_minute in &minutes {
+        let current_window_size = calculate_window_size(
+            current_minute,
+            n_minutes,
+            args.expand_start_minute,
+            args.expand_max_size,
+        );
+
         let mut combined_vehicles = Vec::new();
         let mut count = 0;
 
@@ -203,7 +232,7 @@ fn main() -> Result<()> {
             if minute <= current_minute {
                 combined_vehicles.extend(vehicles_by_minute[&minute].iter().cloned());
                 count += 1;
-                if count >= n_minutes {
+                if count >= current_window_size {
                     break;
                 }
             }
@@ -219,15 +248,16 @@ fn main() -> Result<()> {
                 .iter()
                 .rev()
                 .filter(|&&minute| minute <= current_minute)
-                .take(n_minutes as usize)
+                .take(current_window_size as usize)
                 .cloned()
                 .collect();
             let min_minute = included_minutes.iter().min().unwrap_or(&current_minute);
             let max_minute = included_minutes.iter().max().unwrap_or(&current_minute);
 
             println!(
-                "Minute {}: {} vehicles (from minutes {}-{}) -> {}",
+                "Minute {} (window: {}): {} vehicles (from minutes {}-{}) -> {}",
                 current_minute,
+                current_window_size,
                 combined_vehicles.len(),
                 min_minute,
                 max_minute,
